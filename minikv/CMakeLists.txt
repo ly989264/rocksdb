@@ -57,59 +57,24 @@ target_link_libraries(minikv_server PRIVATE minikv_core)
 target_compile_features(minikv_server PRIVATE cxx_std_17)
 
 if(WITH_TESTS)
-  add_executable(minikv_cmd_test tests/cmd_test.cc)
-  target_link_libraries(minikv_cmd_test
-    PRIVATE
-      minikv_core
-      testharness
-      gtest
-      ${THIRDPARTY_LIBS}
-      ${ROCKSDB_LIB})
-  target_compile_features(minikv_cmd_test PRIVATE cxx_std_17)
-  target_include_directories(minikv_cmd_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  gtest_discover_tests(minikv_cmd_test DISCOVERY_TIMEOUT 120)
-  add_dependencies(rocksdb_check minikv_cmd_test)
+  function(minikv_add_test target source)
+    add_executable(${target} ${source})
+    target_link_libraries(${target}
+      PRIVATE
+        minikv_core
+        testharness
+        gtest
+        ${THIRDPARTY_LIBS}
+        ${ROCKSDB_LIB})
+    target_compile_features(${target} PRIVATE cxx_std_17)
+    target_include_directories(${target} PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    gtest_discover_tests(${target} DISCOVERY_TIMEOUT 120)
+    add_dependencies(rocksdb_check ${target})
+  endfunction()
 
-  add_executable(minikv_hash_test tests/hash_command_test.cc)
-  target_link_libraries(minikv_hash_test
-    PRIVATE
-      minikv_core
-      testharness
-      gtest
-      ${THIRDPARTY_LIBS}
-      ${ROCKSDB_LIB})
-  target_compile_features(minikv_hash_test PRIVATE cxx_std_17)
-  target_include_directories(minikv_hash_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  gtest_discover_tests(minikv_hash_test DISCOVERY_TIMEOUT 120)
-  add_dependencies(rocksdb_check minikv_hash_test)
-
-  add_executable(minikv_server_test tests/server_test.cc)
-  target_link_libraries(minikv_server_test
-    PRIVATE
-      minikv_core
-      testharness
-      gtest
-      ${THIRDPARTY_LIBS}
-      ${ROCKSDB_LIB})
-  target_compile_features(minikv_server_test PRIVATE cxx_std_17)
-  target_include_directories(minikv_server_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  gtest_discover_tests(minikv_server_test DISCOVERY_TIMEOUT 120)
-  add_dependencies(rocksdb_check minikv_server_test)
-
-  add_executable(minikv_worker_test tests/worker_test.cc)
-  target_link_libraries(minikv_worker_test
-    PRIVATE
-      minikv_core
-      testharness
-      gtest
-      ${THIRDPARTY_LIBS}
-      ${ROCKSDB_LIB})
-  target_compile_features(minikv_worker_test PRIVATE cxx_std_17)
-  target_include_directories(minikv_worker_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  gtest_discover_tests(minikv_worker_test DISCOVERY_TIMEOUT 120)
-  add_dependencies(rocksdb_check minikv_worker_test)
+  minikv_add_test(minikv_cmd_test tests/command_test/cmd_test.cc)
+  minikv_add_test(minikv_hash_test tests/command_test/hash_command_test.cc)
+  minikv_add_test(minikv_server_test tests/server_test/server_test.cc)
+  minikv_add_test(minikv_worker_test tests/worker_test/worker_test.cc)
 endif()

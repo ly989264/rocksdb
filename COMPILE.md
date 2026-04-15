@@ -116,23 +116,30 @@ docker exec 974d83bcff5c sh -lc '
 Expected `minikv` outputs inside the container:
 
 - `build-minikv/minikv/minikv_server`
+- `build-minikv/minikv/minikv_cmd_test`
 - `build-minikv/minikv/minikv_hash_test`
 - `build-minikv/minikv/minikv_server_test`
+- `build-minikv/minikv/minikv_worker_test`
 
 Run `minikv` tests directly inside the same container:
 
 ```bash
 docker exec 974d83bcff5c sh -lc '
   cd /workspace/projects/OpenSource/rocksdb &&
+  ./build-minikv/minikv/minikv_cmd_test &&
   ./build-minikv/minikv/minikv_hash_test &&
-  ./build-minikv/minikv/minikv_server_test
+  ./build-minikv/minikv/minikv_server_test &&
+  ./build-minikv/minikv/minikv_worker_test
 '
 ```
 
-At the time of writing, both test binaries pass in that container workflow:
+At the time of writing, all `minikv` test binaries pass in that container
+workflow:
 
-- `minikv_hash_test`: 10 tests passed
-- `minikv_server_test`: 6 tests passed
+- `minikv_cmd_test`: 12 tests passed
+- `minikv_hash_test`: 12 tests passed
+- `minikv_server_test`: 9 tests passed
+- `minikv_worker_test`: 6 tests passed
 
 For more detailed `minikv` notes, see:
 

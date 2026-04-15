@@ -333,8 +333,10 @@ This document was checked against the current code in:
 Behavioral validation has been confirmed in the Linux Docker workflow used for
 this repository:
 
-- `./build-minikv/minikv/minikv_hash_test`: passed, 10 tests
-- `./build-minikv/minikv/minikv_server_test`: passed, 6 tests
+- `./build-minikv/minikv/minikv_cmd_test`: passed, 12 tests
+- `./build-minikv/minikv/minikv_hash_test`: passed, 12 tests
+- `./build-minikv/minikv/minikv_server_test`: passed, 9 tests
+- `./build-minikv/minikv/minikv_worker_test`: passed, 6 tests
 
 One important operational caveat remains: build directories configured inside a
 container may embed container absolute paths. Running host-side `ctest` against

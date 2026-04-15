@@ -18,9 +18,13 @@ Inside `minikv/CMakeLists.txt`, the current targets are:
 - `minikv_core`: static library containing public headers, internal headers, and
   all implementation sources under `src/`
 - `minikv_server`: executable built from `src/main.cc`
+- `minikv_cmd_test`: command factory and base command coverage, gated by
+  `WITH_TESTS`
 - `minikv_hash_test`: hash behavior and concurrency tests, gated by
   `WITH_TESTS`
 - `minikv_server_test`: network/server behavior tests, gated by `WITH_TESTS`
+- `minikv_worker_test`: worker runtime and key-lock scheduling tests, gated by
+  `WITH_TESTS`
 
 ## Dependencies
 
@@ -50,7 +54,8 @@ Typical local commands for `minikv` are:
 mkdir -p build && cd build
 cmake .. -DWITH_MINIKV=ON -DWITH_TESTS=ON
 cmake --build . --target minikv_server -j
-cmake --build . --target minikv_hash_test minikv_server_test -j
+cmake --build . --target minikv_cmd_test minikv_hash_test \
+  minikv_server_test minikv_worker_test -j
 ctest -R minikv --output-on-failure
 ```
 
@@ -93,8 +98,10 @@ Direct test execution inside the same container:
 ```bash
 docker exec <container> sh -lc '
   cd /workspace/projects/OpenSource/rocksdb &&
+  ./build-minikv/minikv/minikv_cmd_test &&
   ./build-minikv/minikv/minikv_hash_test &&
-  ./build-minikv/minikv/minikv_server_test
+  ./build-minikv/minikv/minikv_server_test &&
+  ./build-minikv/minikv/minikv_worker_test
 '
 ```
 
@@ -125,8 +132,10 @@ available for this workspace.
 
 Verified test runs inside the container-configured `build-minikv` directory:
 
-- `./build-minikv/minikv/minikv_hash_test`: passed, 10 tests
-- `./build-minikv/minikv/minikv_server_test`: passed, 6 tests
+- `./build-minikv/minikv/minikv_cmd_test`: passed, 12 tests
+- `./build-minikv/minikv/minikv_hash_test`: passed, 12 tests
+- `./build-minikv/minikv/minikv_server_test`: passed, 9 tests
+- `./build-minikv/minikv/minikv_worker_test`: passed, 6 tests
 
 The earlier confusion came from mixing execution contexts:
 

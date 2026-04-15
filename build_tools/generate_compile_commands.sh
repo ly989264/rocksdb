@@ -8,7 +8,8 @@ shift || true
 JOBS="${JOBS:-8}"
 
 if [[ $# -eq 0 ]]; then
-  set -- minikv_server minikv_hash_test minikv_server_test
+  set -- minikv_server minikv_cmd_test minikv_hash_test \
+    minikv_server_test minikv_worker_test
 fi
 
 if ! command -v compiledb >/dev/null 2>&1; then

@@ -285,7 +285,7 @@ following file names alphabetically.
 
 ### Step 1: Start from behavior, not implementation
 
-Read [`minikv/tests/server_test.cc`](../tests/server_test.cc).
+Read [`minikv/tests/server_test/server_test.cc`](../tests/server_test/server_test.cc).
 
 This gives you the external service contract first:
 
@@ -370,7 +370,7 @@ The key point is to understand one logical hash object as:
 
 ### Step 6: Use unit tests to confirm the concurrency model
 
-Read [`minikv/tests/hash_command_test.cc`](../tests/hash_command_test.cc).
+Read [`minikv/tests/command_test/hash_command_test.cc`](../tests/command_test/hash_command_test.cc).
 
 These tests tell you what the current code considers guaranteed:
 

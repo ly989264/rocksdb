@@ -133,7 +133,13 @@ fi
 ensure_compiledb
 
 ROCKSDB_TARGETS=(rocksdb-shared)
-MINIKV_TARGETS=(minikv_server minikv_hash_test minikv_server_test)
+MINIKV_TARGETS=(
+  minikv_server
+  minikv_cmd_test
+  minikv_hash_test
+  minikv_server_test
+  minikv_worker_test
+)
 
 case "${MODE}" in
   rocksdb)

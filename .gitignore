@@ -14,6 +14,8 @@ rocksdb.pc
 *_test
 *_bench
 *_stress
+!minikv/tests/*_test/
+!minikv/tests/*_test/*.cc
 *.out
 *.class
 *.jar
