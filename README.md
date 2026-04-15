@@ -24,6 +24,15 @@ internal APIs may be changed without warning.
 
 Questions and discussions are welcome on the [RocksDB Developers Public](https://www.facebook.com/groups/rocksdb.dev/) Facebook group and [email list](https://groups.google.com/g/rocksdb) on Google Groups.
 
+## Local Docs
+
+For this workspace, start here before building or exploring `minikv`:
+
+- [COMPILE.md](/Users/liuyu/centos_ex/projects/OpenSource/rocksdb/COMPILE.md): top-level local build and test entrypoint, including the Docker workflow used for Linux builds in this workspace.
+- [minikv/docs/README.md](/Users/liuyu/centos_ex/projects/OpenSource/rocksdb/minikv/docs/README.md): `minikv` documentation index.
+- [minikv/docs/build.md](/Users/liuyu/centos_ex/projects/OpenSource/rocksdb/minikv/docs/build.md): `minikv`-specific build, test, and runtime notes.
+- [minikv/docs/architecture.md](/Users/liuyu/centos_ex/projects/OpenSource/rocksdb/minikv/docs/architecture.md): `minikv` architecture overview and audit.
+
 ## License
 
 RocksDB is dual-licensed under both the GPLv2 (found in the COPYING file in the root directory) and Apache 2.0 License (found in the LICENSE.Apache file in the root directory).  You may select, at your option, one of the above-listed licenses.

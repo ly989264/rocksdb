@@ -1640,3 +1640,8 @@ option(WITH_BENCHMARK "build benchmark tests" OFF)
 if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
 endif()
+
+option(WITH_MINIKV "build minikv" ON)
+if(WITH_MINIKV)
+  add_subdirectory(minikv)
+endif()
