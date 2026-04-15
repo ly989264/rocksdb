@@ -30,6 +30,10 @@ rocksdb.pc
 CMakeCache.txt
 CMakeFiles/
 build/
+build-codex-minikv/
+build-docker/
+build-minikv/
+Testing/
 
 ldb
 manifest_dump
@@ -59,6 +63,7 @@ io_tracer_parser
 .DS_Store
 .vs
 .vscode
+.codex
 .clangd
 
 java/out
@@ -98,6 +103,7 @@ fuzz/proto/gen/
 fuzz/crash-*
 
 cmake-build-*
+third-party/gtest/
 third-party/folly/
 .cache
 *.sublime-*
