@@ -401,6 +401,47 @@ TEST_F(MiniKVServerTest, SlowCommandOnOneKeyDoesNotBlockFastCommandOnOtherKey) {
   close(slow_fd);
 }
 
+TEST_F(MiniKVServerTest, MetricsSnapshotTracksConnectionsAndParseErrors) {
+  minikv::MetricsSnapshot initial = server_->GetMetricsSnapshot();
+  EXPECT_EQ(initial.accepted_connections, 0U);
+  EXPECT_EQ(initial.closed_connections, 0U);
+  EXPECT_EQ(initial.parse_errors, 0U);
+  EXPECT_EQ(initial.active_connections, 0U);
+
+  const int fd = ConnectToServer(server_->port());
+  bool saw_accepted = false;
+  for (int i = 0; i < 20; ++i) {
+    minikv::MetricsSnapshot accepted = server_->GetMetricsSnapshot();
+    if (accepted.accepted_connections >= 1U && accepted.active_connections >= 1U) {
+      saw_accepted = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  ASSERT_TRUE(saw_accepted);
+
+  WriteAll(fd, "+bad\r\n");
+  RespValue error = ReadRespValue(fd);
+  ASSERT_EQ(error.type, RespValue::Type::kError);
+  ASSERT_NE(error.text.find("expected RESP array"), std::string::npos);
+
+  minikv::MetricsSnapshot parsed = server_->GetMetricsSnapshot();
+  EXPECT_EQ(parsed.parse_errors, 1U);
+  EXPECT_EQ(parsed.active_connections, 1U);
+
+  close(fd);
+  for (int i = 0; i < 20; ++i) {
+    minikv::MetricsSnapshot snapshot = server_->GetMetricsSnapshot();
+    if (snapshot.closed_connections >= 1U && snapshot.active_connections == 0U) {
+      EXPECT_EQ(snapshot.closed_connections, 1U);
+      EXPECT_EQ(snapshot.accepted_connections, 1U);
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  FAIL() << "connection metrics were not updated in time";
+}
+
 TEST(MiniKVServerIsolationTest, SlowClientDoesNotBlockOtherConnections) {
   static int counter = 0;
   const std::string db_path =

@@ -62,6 +62,12 @@ bool Worker::BoundedMPSCQueue::HasPending() const {
          tail_.load(std::memory_order_acquire);
 }
 
+size_t Worker::BoundedMPSCQueue::Backlog() const {
+  const size_t head = head_.load(std::memory_order_acquire);
+  const size_t tail = tail_.load(std::memory_order_acquire);
+  return head - tail;
+}
+
 Worker::Worker(DBEngine* engine, KeyLockTable* key_lock_table,
                size_t queue_depth, size_t worker_id)
     : engine_(engine),
@@ -88,6 +94,8 @@ bool Worker::Enqueue(WorkerTask* task) {
   }
   return true;
 }
+
+size_t Worker::backlog() const { return queue_.Backlog(); }
 
 CommandResponse ExecuteCommand(DBEngine* engine, KeyLockTable* key_lock_table,
                                Cmd* cmd) {
@@ -156,12 +164,17 @@ rocksdb::Status WorkerRuntime::Submit(std::unique_ptr<Cmd> cmd,
   task->connection_id = connection_id;
   task->request_seq = request_seq;
   task->cmd = std::move(cmd);
-  task->completion = std::move(completion);
+  task->completion = [this, completion = std::move(completion)](
+                         CommandResponse response) mutable {
+    inflight_requests_.fetch_sub(1, std::memory_order_relaxed);
+    completion(std::move(response));
+  };
 
   const size_t start = next_worker_.fetch_add(1, std::memory_order_relaxed);
   for (size_t offset = 0; offset < workers_.size(); ++offset) {
     Worker* worker = workers_[(start + offset) % workers_.size()].get();
     if (worker->Enqueue(task.get())) {
+      inflight_requests_.fetch_add(1, std::memory_order_relaxed);
       task.release();
       return rocksdb::Status::OK();
     }
@@ -169,6 +182,23 @@ rocksdb::Status WorkerRuntime::Submit(std::unique_ptr<Cmd> cmd,
 
   rejected_requests_.fetch_add(1, std::memory_order_relaxed);
   return rocksdb::Status::Busy("worker queue full");
+}
+
+std::vector<size_t> WorkerRuntime::worker_queue_depth() const {
+  std::vector<size_t> queue_depth;
+  queue_depth.reserve(workers_.size());
+  for (const auto& worker : workers_) {
+    queue_depth.push_back(worker->backlog());
+  }
+  return queue_depth;
+}
+
+MetricsSnapshot WorkerRuntime::GetMetricsSnapshot() const {
+  MetricsSnapshot snapshot;
+  snapshot.worker_queue_depth = worker_queue_depth();
+  snapshot.worker_rejections = rejected_requests();
+  snapshot.worker_inflight = inflight_requests();
+  return snapshot;
 }
 
 }  // namespace minikv

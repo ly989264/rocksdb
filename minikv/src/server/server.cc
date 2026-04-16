@@ -81,6 +81,11 @@ rocksdb::Status Server::Start() {
   if (started_.exchange(true)) {
     return rocksdb::Status::InvalidArgument("server already started");
   }
+  accepted_connections_.store(0, std::memory_order_relaxed);
+  closed_connections_.store(0, std::memory_order_relaxed);
+  idle_timeout_connections_.store(0, std::memory_order_relaxed);
+  errored_connections_.store(0, std::memory_order_relaxed);
+  parse_errors_.store(0, std::memory_order_relaxed);
   rocksdb::Status status = SetupListenSocket();
   if (!status.ok()) {
     started_.store(false);
@@ -170,6 +175,26 @@ rocksdb::Status Server::Run() {
   return rocksdb::Status::OK();
 }
 
+MetricsSnapshot Server::GetMetricsSnapshot() const {
+  MetricsSnapshot snapshot;
+  snapshot.active_connections = connection_count_.load(std::memory_order_relaxed);
+  snapshot.accepted_connections =
+      accepted_connections_.load(std::memory_order_relaxed);
+  snapshot.closed_connections = closed_connections_.load(std::memory_order_relaxed);
+  snapshot.idle_timeout_connections =
+      idle_timeout_connections_.load(std::memory_order_relaxed);
+  snapshot.errored_connections =
+      errored_connections_.load(std::memory_order_relaxed);
+  snapshot.parse_errors = parse_errors_.load(std::memory_order_relaxed);
+  if (worker_runtime_ != nullptr) {
+    MetricsSnapshot worker_snapshot = worker_runtime_->GetMetricsSnapshot();
+    snapshot.worker_queue_depth = std::move(worker_snapshot.worker_queue_depth);
+    snapshot.worker_rejections = worker_snapshot.worker_rejections;
+    snapshot.worker_inflight = worker_snapshot.worker_inflight;
+  }
+  return snapshot;
+}
+
 void Server::AcceptLoop() {
   SetCurrentThreadName("minikv-accept");
   while (!stopping_.load()) {
@@ -200,6 +225,7 @@ void Server::EnqueueConnection(int fd) {
     close(fd);
     return;
   }
+  accepted_connections_.fetch_add(1, std::memory_order_relaxed);
 
   const size_t io_index = next_io_thread_.fetch_add(1) % io_threads_.size();
   IOThreadState* io_thread = io_threads_[io_index].get();
@@ -278,6 +304,9 @@ void Server::CloseIdleConnections(IOThreadState* io_thread) {
       continue;
     }
     if (stopping_.load() || now - connection.last_activity >= idle_limit) {
+      if (!stopping_.load() && now - connection.last_activity >= idle_limit) {
+        connection.close_due_to_idle_timeout = true;
+      }
       connection.close_after_write = true;
     }
   }
@@ -342,13 +371,20 @@ void Server::RunIOThread(size_t io_thread_id) {
       bool remove_connection = false;
       Connection* connection = &io_thread->connections[index - 1];
       if ((poll_fds[index].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+        connection->close_due_to_error = true;
         remove_connection = true;
       } else {
         if ((poll_fds[index].revents & POLLIN) != 0) {
           remove_connection = !HandleReadable(io_thread_id, connection);
+          if (remove_connection) {
+            connection->close_due_to_error = true;
+          }
         }
         if (!remove_connection && (poll_fds[index].revents & POLLOUT) != 0) {
           remove_connection = !HandleWritable(connection);
+          if (remove_connection) {
+            connection->close_due_to_error = true;
+          }
         }
         if (!remove_connection && connection->close_after_write &&
             connection->pending_requests == 0 &&
@@ -418,6 +454,7 @@ bool Server::HandleReadable(size_t io_thread_id, Connection* connection) {
         break;
       }
       if (!error.empty()) {
+        parse_errors_.fetch_add(1, std::memory_order_relaxed);
         QueueResponse(connection, EncodeError("ERR " + error));
         continue;
       }
@@ -489,6 +526,13 @@ void Server::CloseConnection(Connection* connection) {
     close(connection->fd);
     connection->fd = -1;
     connection_count_.fetch_sub(1);
+    closed_connections_.fetch_add(1, std::memory_order_relaxed);
+    if (connection->close_due_to_idle_timeout) {
+      idle_timeout_connections_.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (connection->close_due_to_error) {
+      errored_connections_.fetch_add(1, std::memory_order_relaxed);
+    }
   }
 }
 
@@ -533,6 +577,8 @@ void Server::Wait() {}
 rocksdb::Status Server::Run() {
   return rocksdb::Status::NotSupported("minikv_server is POSIX-only");
 }
+
+MetricsSnapshot Server::GetMetricsSnapshot() const { return MetricsSnapshot{}; }
 
 }  // namespace minikv
 

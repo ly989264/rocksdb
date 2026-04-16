@@ -98,17 +98,46 @@ implementation.
 
 ## Current Design Risks
 
-### Operability
+### Observability
 
-The current server has no first-class metrics for:
+`Server` now exports a process-internal metrics API via
+`Server::GetMetricsSnapshot()`. The snapshot is in-memory only for now (no
+network status endpoint yet), and it is safe to sample from control paths or
+tests without touching the RESP data plane.
 
-- per-I/O-thread connection count
-- per-worker backlog
-- inflight requests
-- parse failures
-- rejected requests
+Metric definitions and sampling points:
 
-That makes production debugging expensive.
+- `worker_queue_depth[i]`:
+  - definition: current backlog (`head - tail`) of worker queue `i`
+  - sampled when `GetMetricsSnapshot()` calls `WorkerRuntime` aggregation
+- `worker_rejections`:
+  - definition: total worker submission rejections (`Busy("worker queue full")`)
+  - sampled from `WorkerRuntime::rejected_requests_`
+- `worker_inflight`:
+  - definition: number of accepted worker tasks not yet completed
+  - incremented on successful enqueue, decremented in completion callback
+- `active_connections`:
+  - definition: currently open TCP connections
+  - sampled from `Server::connection_count_`
+- `accepted_connections`:
+  - definition: cumulative accepted connections that passed admission checks
+  - incremented in `Server::EnqueueConnection()`
+- `closed_connections`:
+  - definition: cumulative closed connections
+  - incremented in `Server::CloseConnection()`
+- `idle_timeout_connections`:
+  - definition: cumulative connections closed because idle timeout was hit
+  - marked in `Server::CloseIdleConnections()`, counted in `CloseConnection()`
+- `errored_connections`:
+  - definition: cumulative connections closed due to poll/read/write errors
+  - marked in `RunIOThread()` failure branches, counted in `CloseConnection()`
+- `parse_errors`:
+  - definition: RESP parse failures (malformed request payloads)
+  - incremented in `Server::HandleReadable()` when parser returns an error
+
+This gives a minimal viable export surface for overload/backpressure and
+connection-health diagnostics. A network `/status` endpoint can be layered on
+top later by serializing the same snapshot.
 
 ### Event Loop Scalability
 

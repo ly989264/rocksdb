@@ -13,6 +13,7 @@
 
 #include "command/cmd.h"
 #include "engine/db_engine.h"
+#include "server/metrics.h"
 #include "worker/key_lock_table.h"
 
 namespace minikv {
@@ -37,6 +38,7 @@ class Worker {
   Worker& operator=(const Worker&) = delete;
 
   bool Enqueue(WorkerTask* task);
+  size_t backlog() const;
 
  private:
   class BoundedMPSCQueue {
@@ -46,6 +48,7 @@ class Worker {
     bool TryEnqueue(WorkerTask* task);
     bool TryDequeue(WorkerTask** task);
     bool HasPending() const;
+    size_t Backlog() const;
 
    private:
     struct Cell {
@@ -92,11 +95,17 @@ class WorkerRuntime {
   uint64_t rejected_requests() const {
     return rejected_requests_.load(std::memory_order_relaxed);
   }
+  uint64_t inflight_requests() const {
+    return inflight_requests_.load(std::memory_order_relaxed);
+  }
+  std::vector<size_t> worker_queue_depth() const;
+  MetricsSnapshot GetMetricsSnapshot() const;
 
  private:
   std::vector<std::unique_ptr<Worker>> workers_;
   std::atomic<size_t> next_worker_{0};
   std::atomic<uint64_t> rejected_requests_{0};
+  std::atomic<uint64_t> inflight_requests_{0};
 };
 
 CommandResponse ExecuteCommand(DBEngine* engine, KeyLockTable* key_lock_table,

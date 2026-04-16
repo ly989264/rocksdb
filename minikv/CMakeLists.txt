@@ -12,6 +12,7 @@ set(MINIKV_INTERNAL_HEADERS
   src/common/thread_name.h
   src/engine/db_engine.h
   src/engine/key_codec.h
+  src/server/metrics.h
   src/server/resp_parser.h
   src/server/server.h
   src/worker/key_lock_table.h
