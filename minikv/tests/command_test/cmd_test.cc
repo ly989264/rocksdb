@@ -13,6 +13,12 @@
 
 namespace {
 
+enum class TestReplyMode {
+  kSimpleString,
+  kInteger,
+  kArray,
+};
+
 void ExpectFlags(minikv::CmdFlags flags, bool expect_read, bool expect_write,
                  bool expect_fast, bool expect_slow) {
   EXPECT_EQ(minikv::HasFlag(flags, minikv::CmdFlags::kRead), expect_read);
@@ -21,15 +27,27 @@ void ExpectFlags(minikv::CmdFlags flags, bool expect_read, bool expect_write,
   EXPECT_EQ(minikv::HasFlag(flags, minikv::CmdFlags::kSlow), expect_slow);
 }
 
+void ExpectBulkStringArray(const minikv::ReplyNode& reply,
+                           const std::vector<std::string>& values) {
+  ASSERT_TRUE(reply.IsArray());
+  ASSERT_EQ(reply.array().size(), values.size());
+  for (size_t i = 0; i < values.size(); ++i) {
+    EXPECT_TRUE(reply.array()[i].IsBulkString());
+    EXPECT_EQ(reply.array()[i].string(), values[i]);
+  }
+}
+
 class TestCmd : public minikv::Cmd {
  public:
   TestCmd()
-      : minikv::Cmd("TEST", static_cast<minikv::CommandType>(777),
+      : minikv::Cmd("TEST",
                     minikv::CmdFlags::kRead | minikv::CmdFlags::kFast) {}
 
   void FailInit(bool value) { fail_init_ = value; }
-  void SetResponseMode(minikv::ResponseType type) { response_type_ = type; }
-  void SetStatusToReturn(rocksdb::Status status) { status_to_return_ = std::move(status); }
+  void SetResponseMode(TestReplyMode type) { response_type_ = type; }
+  void SetStatusToReturn(rocksdb::Status status) {
+    status_to_return_ = std::move(status);
+  }
   void SetRouteKeyToExpose(const std::string& key) { SetRouteKey(key); }
 
  protected:
@@ -63,18 +81,18 @@ class TestCmd : public minikv::Cmd {
       return MakeStatus(std::move(status_to_return_));
     }
     switch (response_type_) {
-      case minikv::ResponseType::kSimpleString:
+      case TestReplyMode::kSimpleString:
         return MakeSimpleString("OK");
-      case minikv::ResponseType::kInteger:
+      case TestReplyMode::kInteger:
         return MakeInteger(7);
-      case minikv::ResponseType::kArray:
-        return MakeArray({"a", "b"});
+      case TestReplyMode::kArray:
+        return MakeArray(std::vector<std::string>{"a", "b"});
     }
     return MakeStatus(rocksdb::Status::Aborted("unexpected response type"));
   }
 
   bool fail_init_ = false;
-  minikv::ResponseType response_type_ = minikv::ResponseType::kSimpleString;
+  TestReplyMode response_type_ = TestReplyMode::kSimpleString;
   rocksdb::Status status_to_return_ = rocksdb::Status::OK();
 };
 
@@ -116,38 +134,35 @@ class CmdExecutionTest : public ::testing::Test {
   std::unique_ptr<minikv::DBEngine> engine_;
 };
 
-TEST(CmdFactoryTest, FindsRegisteredCommandsByNameAndType) {
+TEST(CmdFactoryTest, FindsRegisteredCommandsByName) {
   const minikv::CmdRegistration* ping =
       minikv::CmdFactory::FindByName("PING");
   ASSERT_NE(ping, nullptr);
-  EXPECT_EQ(ping->type, minikv::CommandType::kPing);
+  EXPECT_EQ(ping->source, minikv::CommandSource::kBuiltin);
   ExpectFlags(ping->flags, true, false, true, false);
 
   const minikv::CmdRegistration* hset =
-      minikv::CmdFactory::FindByType(minikv::CommandType::kHSet);
+      minikv::CmdFactory::FindByName("HSET");
   ASSERT_NE(hset, nullptr);
-  EXPECT_EQ(std::string(hset->name), "HSET");
+  EXPECT_EQ(hset->name, "HSET");
   ExpectFlags(hset->flags, false, true, true, false);
 
   const minikv::CmdRegistration* hgetall =
-      minikv::CmdFactory::FindByType(minikv::CommandType::kHGetAll);
+      minikv::CmdFactory::FindByName("HGETALL");
   ASSERT_NE(hgetall, nullptr);
-  EXPECT_EQ(std::string(hgetall->name), "HGETALL");
+  EXPECT_EQ(hgetall->name, "HGETALL");
   ExpectFlags(hgetall->flags, true, false, false, true);
 
   const minikv::CmdRegistration* hdel =
-      minikv::CmdFactory::FindByType(minikv::CommandType::kHDel);
+      minikv::CmdFactory::FindByName("HDEL");
   ASSERT_NE(hdel, nullptr);
-  EXPECT_EQ(std::string(hdel->name), "HDEL");
+  EXPECT_EQ(hdel->name, "HDEL");
   ExpectFlags(hdel->flags, false, true, false, true);
 }
 
 TEST(CmdFactoryTest, ReturnsNullForUnknownRegistrations) {
   EXPECT_EQ(minikv::CmdFactory::FindByName("ping"), nullptr);
   EXPECT_EQ(minikv::CmdFactory::FindByName("UNKNOWN"), nullptr);
-  EXPECT_EQ(minikv::CmdFactory::FindByType(
-                static_cast<minikv::CommandType>(999)),
-            nullptr);
 }
 
 TEST(CmdCreateTest, CreatesCommandsFromRespPartsAndRequests) {
@@ -155,7 +170,6 @@ TEST(CmdCreateTest, CreatesCommandsFromRespPartsAndRequests) {
   ASSERT_TRUE(minikv::CreateCmd({"PING"}, &ping).ok());
   ASSERT_NE(ping, nullptr);
   EXPECT_EQ(ping->Name(), "PING");
-  EXPECT_EQ(ping->Type(), minikv::CommandType::kPing);
   EXPECT_TRUE(ping->RouteKey().empty());
   ExpectFlags(ping->Flags(), true, false, true, false);
 
@@ -252,25 +266,22 @@ TEST(CmdBaseTest, SharedResponseBuildersProduceExpectedShapes) {
   TestCmd cmd;
   ASSERT_TRUE(cmd.Init(minikv::CmdInput{}).ok());
 
-  cmd.SetResponseMode(minikv::ResponseType::kSimpleString);
+  cmd.SetResponseMode(TestReplyMode::kSimpleString);
   minikv::CommandResponse response = cmd.Execute(nullptr);
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kSimpleString);
-  EXPECT_EQ(response.value.text, "OK");
+  ASSERT_TRUE(response.reply.IsSimpleString());
+  EXPECT_EQ(response.reply.string(), "OK");
 
-  cmd.SetResponseMode(minikv::ResponseType::kInteger);
+  cmd.SetResponseMode(TestReplyMode::kInteger);
   response = cmd.Execute(nullptr);
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kInteger);
-  EXPECT_EQ(response.value.integer, 7);
+  ASSERT_TRUE(response.reply.IsInteger());
+  EXPECT_EQ(response.reply.integer(), 7);
 
-  cmd.SetResponseMode(minikv::ResponseType::kArray);
+  cmd.SetResponseMode(TestReplyMode::kArray);
   response = cmd.Execute(nullptr);
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kArray);
-  ASSERT_EQ(response.value.array.size(), 2U);
-  EXPECT_EQ(response.value.array[0], "a");
-  EXPECT_EQ(response.value.array[1], "b");
+  ExpectBulkStringArray(response.reply, {"a", "b"});
 
   cmd.SetStatusToReturn(rocksdb::Status::Corruption("forced"));
   response = cmd.Execute(nullptr);
@@ -294,8 +305,8 @@ TEST_F(CmdExecutionTest, PingExecuteReturnsPong) {
 
   minikv::CommandResponse response = ping->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kSimpleString);
-  EXPECT_EQ(response.value.text, "PONG");
+  ASSERT_TRUE(response.reply.IsSimpleString());
+  EXPECT_EQ(response.reply.string(), "PONG");
 }
 
 TEST_F(CmdExecutionTest, HSetAndHGetAllExecuteAgainstEngine) {
@@ -304,8 +315,8 @@ TEST_F(CmdExecutionTest, HSetAndHGetAllExecuteAgainstEngine) {
   ASSERT_NE(set_insert, nullptr);
   minikv::CommandResponse response = set_insert->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kInteger);
-  EXPECT_EQ(response.value.integer, 1);
+  ASSERT_TRUE(response.reply.IsInteger());
+  EXPECT_EQ(response.reply.integer(), 1);
 
   std::unique_ptr<minikv::Cmd> set_update =
       CreateFromRequest(minikv::CommandRequest{
@@ -313,17 +324,14 @@ TEST_F(CmdExecutionTest, HSetAndHGetAllExecuteAgainstEngine) {
   ASSERT_NE(set_update, nullptr);
   response = set_update->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.integer, 0);
+  EXPECT_EQ(response.reply.integer(), 0);
 
   std::unique_ptr<minikv::Cmd> get =
       CreateFromParts({"HGETALL", "user:2"});
   ASSERT_NE(get, nullptr);
   response = get->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kArray);
-  ASSERT_EQ(response.value.array.size(), 2U);
-  EXPECT_EQ(response.value.array[0], "name");
-  EXPECT_EQ(response.value.array[1], "alice-2");
+  ExpectBulkStringArray(response.reply, {"name", "alice-2"});
 }
 
 TEST_F(CmdExecutionTest, HDelExecuteRemovesFields) {
@@ -336,8 +344,8 @@ TEST_F(CmdExecutionTest, HDelExecuteRemovesFields) {
 
   minikv::CommandResponse response = del->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kInteger);
-  EXPECT_EQ(response.value.integer, 2);
+  ASSERT_TRUE(response.reply.IsInteger());
+  EXPECT_EQ(response.reply.integer(), 2);
 
   std::vector<minikv::FieldValue> values;
   ASSERT_TRUE(engine_->HGetAll("user:3", &values).ok());
@@ -350,16 +358,15 @@ TEST_F(CmdExecutionTest, HashCommandsOnMissingKeyReturnEmptySuccess) {
   ASSERT_NE(get, nullptr);
   minikv::CommandResponse response = get->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kArray);
-  EXPECT_TRUE(response.value.array.empty());
+  ExpectBulkStringArray(response.reply, {});
 
   std::unique_ptr<minikv::Cmd> del =
       CreateFromParts({"HDEL", "missing", "field"});
   ASSERT_NE(del, nullptr);
   response = del->Execute(engine_.get());
   ASSERT_TRUE(response.status.ok());
-  EXPECT_EQ(response.value.type, minikv::ResponseType::kInteger);
-  EXPECT_EQ(response.value.integer, 0);
+  ASSERT_TRUE(response.reply.IsInteger());
+  EXPECT_EQ(response.reply.integer(), 0);
 }
 
 }  // namespace

@@ -1,8 +1,6 @@
 #include "command/cmd_create.h"
 
-#include <cctype>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -11,18 +9,13 @@
 namespace minikv {
 namespace {
 
-std::string NormalizeCommandName(const std::string& name) {
-  std::string normalized = name;
-  for (char& c : normalized) {
-    c = static_cast<char>(::toupper(static_cast<unsigned char>(c)));
-  }
-  return normalized;
-}
-
 rocksdb::Status CreateCmdFromRegistration(const CmdRegistration& registration,
                                           const CmdInput& input,
                                           std::unique_ptr<Cmd>* cmd) {
   std::unique_ptr<Cmd> created = registration.creator(registration);
+  if (created == nullptr) {
+    return rocksdb::Status::Corruption("command creator returned null");
+  }
   rocksdb::Status status = created->Init(input);
   if (!status.ok()) {
     return status;
@@ -47,8 +40,7 @@ CmdInput MakeInput(const CommandRequest& request) {
   CmdInput input;
   input.key = request.key;
   input.args = request.args;
-  input.has_key = request.type == CommandType::kPing ? !request.key.empty()
-                                                     : true;
+  input.has_key = request.has_key;
   return input;
 }
 
@@ -79,9 +71,13 @@ rocksdb::Status CreateCmd(const CommandRequest& request,
   }
   cmd->reset();
 
-  const CmdRegistration* registration = CmdFactory::FindByType(request.type);
-  if (registration == nullptr) {
+  if (request.name.empty()) {
     return rocksdb::Status::InvalidArgument("unknown command type");
+  }
+  const CmdRegistration* registration =
+      CmdFactory::FindByName(NormalizeCommandName(request.name));
+  if (registration == nullptr) {
+    return rocksdb::Status::InvalidArgument("unsupported command");
   }
   return CreateCmdFromRegistration(*registration, MakeInput(request), cmd);
 }

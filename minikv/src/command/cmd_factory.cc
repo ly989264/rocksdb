@@ -1,40 +1,41 @@
 #include "command/cmd_factory.h"
 
+#include <cassert>
+#include <utility>
+
 #include "command/t_hash.h"
 #include "command/t_kv.h"
 
 namespace minikv {
 namespace {
 
-const CmdRegistration kRegistrations[] = {
-    {"PING", CommandType::kPing, CmdFlags::kRead | CmdFlags::kFast,
-     &CreatePingCmd},
-    {"HSET", CommandType::kHSet, CmdFlags::kWrite | CmdFlags::kFast,
-     &CreateHSetCmd},
-    {"HGETALL", CommandType::kHGetAll, CmdFlags::kRead | CmdFlags::kSlow,
-     &CreateHGetAllCmd},
-    {"HDEL", CommandType::kHDel, CmdFlags::kWrite | CmdFlags::kSlow,
-     &CreateHDelCmd},
-};
+void MustRegister(CommandRegistry* registry, CmdRegistration registration) {
+  rocksdb::Status status = registry->Register(std::move(registration));
+  assert(status.ok());
+}
+
+CommandRegistry BuildRegistry() {
+  CommandRegistry registry;
+  MustRegister(&registry, {"PING", CmdFlags::kRead | CmdFlags::kFast,
+                           CommandSource::kBuiltin, &CreatePingCmd});
+  MustRegister(&registry, {"HSET", CmdFlags::kWrite | CmdFlags::kFast,
+                           CommandSource::kBuiltin, &CreateHSetCmd});
+  MustRegister(&registry, {"HGETALL", CmdFlags::kRead | CmdFlags::kSlow,
+                           CommandSource::kBuiltin, &CreateHGetAllCmd});
+  MustRegister(&registry, {"HDEL", CmdFlags::kWrite | CmdFlags::kSlow,
+                           CommandSource::kBuiltin, &CreateHDelCmd});
+  return registry;
+}
 
 }  // namespace
 
-const CmdRegistration* CmdFactory::FindByName(const std::string& name) {
-  for (const auto& registration : kRegistrations) {
-    if (name == registration.name) {
-      return &registration;
-    }
-  }
-  return nullptr;
+const CommandRegistry& CmdFactory::Registry() {
+  static const CommandRegistry registry = BuildRegistry();
+  return registry;
 }
 
-const CmdRegistration* CmdFactory::FindByType(CommandType type) {
-  for (const auto& registration : kRegistrations) {
-    if (type == registration.type) {
-      return &registration;
-    }
-  }
-  return nullptr;
+const CmdRegistration* CmdFactory::FindByName(const std::string& name) {
+  return Registry().Find(name);
 }
 
 }  // namespace minikv

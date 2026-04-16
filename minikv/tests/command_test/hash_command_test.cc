@@ -156,23 +156,23 @@ TEST_F(MiniKVHashTest, ExecuteUsesUnifiedCommandPath) {
   minikv::CommandResponse ping =
       kv_->Execute(minikv::CommandRequest{minikv::CommandType::kPing, "", {}});
   ASSERT_TRUE(ping.status.ok());
-  ASSERT_EQ(ping.value.type, minikv::ResponseType::kSimpleString);
-  ASSERT_EQ(ping.value.text, "PONG");
+  ASSERT_TRUE(ping.reply.IsSimpleString());
+  ASSERT_EQ(ping.reply.string(), "PONG");
 
   minikv::CommandResponse set = kv_->Execute(
       minikv::CommandRequest{minikv::CommandType::kHSet, "user:cmd",
                              {"name", "alice"}});
   ASSERT_TRUE(set.status.ok());
-  ASSERT_EQ(set.value.type, minikv::ResponseType::kInteger);
-  ASSERT_EQ(set.value.integer, 1);
+  ASSERT_TRUE(set.reply.IsInteger());
+  ASSERT_EQ(set.reply.integer(), 1);
 
   minikv::CommandResponse get = kv_->Execute(
       minikv::CommandRequest{minikv::CommandType::kHGetAll, "user:cmd", {}});
   ASSERT_TRUE(get.status.ok());
-  ASSERT_EQ(get.value.type, minikv::ResponseType::kArray);
-  ASSERT_EQ(get.value.array.size(), 2U);
-  ASSERT_EQ(get.value.array[0], "name");
-  ASSERT_EQ(get.value.array[1], "alice");
+  ASSERT_TRUE(get.reply.IsArray());
+  ASSERT_EQ(get.reply.array().size(), 2U);
+  ASSERT_EQ(get.reply.array()[0].string(), "name");
+  ASSERT_EQ(get.reply.array()[1].string(), "alice");
 }
 
 TEST_F(MiniKVHashTest, PersistsTypedMetadataAcrossReopen) {
@@ -262,7 +262,7 @@ TEST_F(MiniKVHashTest, AsyncSubmitProcessesParallelCommandsOnDifferentKeys) {
                                {"field", "value:" + std::to_string(i)}},
         [&done, i](minikv::CommandResponse response) {
           ASSERT_TRUE(response.status.ok());
-          ASSERT_EQ(response.value.type, minikv::ResponseType::kInteger);
+          ASSERT_TRUE(response.reply.IsInteger());
           done[i].set_value();
         });
     ASSERT_TRUE(status.ok());

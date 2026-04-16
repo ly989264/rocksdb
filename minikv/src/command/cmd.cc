@@ -2,8 +2,8 @@
 
 namespace minikv {
 
-Cmd::Cmd(std::string name, CommandType type, CmdFlags flags)
-    : name_(std::move(name)), type_(type), flags_(flags) {}
+Cmd::Cmd(std::string name, CmdFlags flags)
+    : name_(std::move(name)), flags_(flags) {}
 
 rocksdb::Status Cmd::Init(const CmdInput& input) {
   initialized_ = false;
@@ -33,24 +33,56 @@ CommandResponse Cmd::MakeStatus(rocksdb::Status status) {
 CommandResponse Cmd::MakeSimpleString(std::string text) {
   CommandResponse response;
   response.status = rocksdb::Status::OK();
-  response.value.type = ResponseType::kSimpleString;
-  response.value.text = std::move(text);
+  response.reply = ReplyNode::SimpleString(std::move(text));
+  return response;
+}
+
+CommandResponse Cmd::MakeError(std::string text) {
+  CommandResponse response;
+  response.status = rocksdb::Status::OK();
+  response.reply = ReplyNode::Error(std::move(text));
   return response;
 }
 
 CommandResponse Cmd::MakeInteger(long long value) {
   CommandResponse response;
   response.status = rocksdb::Status::OK();
-  response.value.type = ResponseType::kInteger;
-  response.value.integer = value;
+  response.reply = ReplyNode::Integer(value);
+  return response;
+}
+
+CommandResponse Cmd::MakeBulkString(std::string value) {
+  CommandResponse response;
+  response.status = rocksdb::Status::OK();
+  response.reply = ReplyNode::BulkString(std::move(value));
+  return response;
+}
+
+CommandResponse Cmd::MakeNull() {
+  CommandResponse response;
+  response.status = rocksdb::Status::OK();
+  response.reply = ReplyNode::Null();
   return response;
 }
 
 CommandResponse Cmd::MakeArray(std::vector<std::string> values) {
   CommandResponse response;
   response.status = rocksdb::Status::OK();
-  response.value.type = ResponseType::kArray;
-  response.value.array = std::move(values);
+  response.reply = ReplyNode::BulkStringArray(std::move(values));
+  return response;
+}
+
+CommandResponse Cmd::MakeArray(std::vector<ReplyNode> values) {
+  CommandResponse response;
+  response.status = rocksdb::Status::OK();
+  response.reply = ReplyNode::Array(std::move(values));
+  return response;
+}
+
+CommandResponse Cmd::MakeMap(std::vector<ReplyNode::MapEntry> entries) {
+  CommandResponse response;
+  response.status = rocksdb::Status::OK();
+  response.reply = ReplyNode::Map(std::move(entries));
   return response;
 }
 

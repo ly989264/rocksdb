@@ -53,26 +53,29 @@ class Cmd {
   CommandResponse Execute(DBEngine* engine);
 
   const std::string& Name() const { return name_; }
-  CommandType Type() const { return type_; }
   CmdFlags Flags() const { return flags_; }
   const std::string& RouteKey() const { return route_key_; }
 
  protected:
-  Cmd(std::string name, CommandType type, CmdFlags flags);
+  Cmd(std::string name, CmdFlags flags);
 
   void SetRouteKey(std::string key) { route_key_ = std::move(key); }
 
   static CommandResponse MakeStatus(rocksdb::Status status);
   static CommandResponse MakeSimpleString(std::string text);
+  static CommandResponse MakeError(std::string text);
   static CommandResponse MakeInteger(long long value);
+  static CommandResponse MakeBulkString(std::string value);
+  static CommandResponse MakeNull();
   static CommandResponse MakeArray(std::vector<std::string> values);
+  static CommandResponse MakeArray(std::vector<ReplyNode> values);
+  static CommandResponse MakeMap(std::vector<ReplyNode::MapEntry> entries);
 
  private:
   virtual rocksdb::Status DoInitial(const CmdInput& input) = 0;
   virtual CommandResponse Do(DBEngine* engine) = 0;
 
   std::string name_;
-  CommandType type_;
   CmdFlags flags_;
   std::string route_key_;
   bool initialized_ = false;

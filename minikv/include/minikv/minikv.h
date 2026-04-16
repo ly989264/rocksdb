@@ -29,7 +29,15 @@ class MiniKV {
                               std::unique_ptr<MiniKV>* minikv);
 
   CommandResponse Execute(const CommandRequest& request);
+  CommandResponse Execute(std::string name, std::vector<std::string> args = {});
+  CommandResponse Execute(std::string name, std::string key,
+                          std::vector<std::string> args);
   rocksdb::Status Submit(const CommandRequest& request, CommandCallback callback);
+  rocksdb::Status Submit(std::string name, std::vector<std::string> args,
+                         CommandCallback callback);
+  rocksdb::Status Submit(std::string name, std::string key,
+                         std::vector<std::string> args,
+                         CommandCallback callback);
 
   rocksdb::Status HSet(const std::string& key, const std::string& field,
                        const std::string& value, bool* inserted = nullptr);

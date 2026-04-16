@@ -8,7 +8,7 @@ namespace {
 class PingCmd : public Cmd {
  public:
   explicit PingCmd(const CmdRegistration& registration)
-      : Cmd(registration.name, registration.type, registration.flags) {}
+      : Cmd(registration.name, registration.flags) {}
 
  private:
   rocksdb::Status DoInitial(const CmdInput& input) override {

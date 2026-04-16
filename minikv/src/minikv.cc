@@ -50,6 +50,17 @@ CommandResponse MiniKV::Execute(const CommandRequest& request) {
   return Execute(std::move(cmd));
 }
 
+CommandResponse MiniKV::Execute(std::string name,
+                                std::vector<std::string> args) {
+  return Execute(CommandRequest(std::move(name), std::move(args)));
+}
+
+CommandResponse MiniKV::Execute(std::string name, std::string key,
+                                std::vector<std::string> args) {
+  return Execute(
+      CommandRequest(std::move(name), std::move(key), std::move(args)));
+}
+
 rocksdb::Status MiniKV::Submit(const CommandRequest& request,
                                CommandCallback callback) {
   std::unique_ptr<Cmd> cmd;
@@ -58,6 +69,19 @@ rocksdb::Status MiniKV::Submit(const CommandRequest& request,
     return status;
   }
   return Submit(std::move(cmd), std::move(callback));
+}
+
+rocksdb::Status MiniKV::Submit(std::string name, std::vector<std::string> args,
+                               CommandCallback callback) {
+  return Submit(CommandRequest(std::move(name), std::move(args)),
+                std::move(callback));
+}
+
+rocksdb::Status MiniKV::Submit(std::string name, std::string key,
+                               std::vector<std::string> args,
+                               CommandCallback callback) {
+  return Submit(CommandRequest(std::move(name), std::move(key), std::move(args)),
+                std::move(callback));
 }
 
 rocksdb::Status MiniKV::Submit(std::unique_ptr<Cmd> cmd,
@@ -79,23 +103,24 @@ KeyLockTable* MiniKV::key_lock_table() { return &impl_->key_lock_table; }
 
 rocksdb::Status MiniKV::HSet(const std::string& key, const std::string& field,
                              const std::string& value, bool* inserted) {
-  CommandRequest request{CommandType::kHSet, key, {field, value}};
+  CommandRequest request{"HSET", key, {field, value}};
   CommandResponse response = Execute(request);
   if (inserted != nullptr) {
-    *inserted = response.status.ok() && response.value.integer == 1;
+    *inserted = response.status.ok() && response.reply.IsInteger() &&
+                response.reply.integer() == 1;
   }
   return response.status;
 }
 
 rocksdb::Status MiniKV::HGetAll(const std::string& key,
                                 std::vector<FieldValue>* out) {
-  CommandRequest request{CommandType::kHGetAll, key, {}};
+  CommandRequest request{"HGETALL", key, {}};
   CommandResponse response = Execute(request);
-  if (response.status.ok()) {
+  if (response.status.ok() && response.reply.IsArray()) {
     out->clear();
-    for (size_t i = 0; i + 1 < response.value.array.size(); i += 2) {
-      out->push_back(FieldValue{response.value.array[i],
-                                response.value.array[i + 1]});
+    const auto& values = response.reply.array();
+    for (size_t i = 0; i + 1 < values.size(); i += 2) {
+      out->push_back(FieldValue{values[i].string(), values[i + 1].string()});
     }
   }
   return response.status;
@@ -104,11 +129,12 @@ rocksdb::Status MiniKV::HGetAll(const std::string& key,
 rocksdb::Status MiniKV::HDel(const std::string& key,
                              const std::vector<std::string>& fields,
                              uint64_t* deleted) {
-  CommandRequest request{CommandType::kHDel, key, fields};
+  CommandRequest request{"HDEL", key, fields};
   CommandResponse response = Execute(request);
   if (deleted != nullptr) {
-    *deleted = response.status.ok() ? static_cast<uint64_t>(response.value.integer)
-                                    : 0;
+    *deleted = response.status.ok() && response.reply.IsInteger()
+                   ? static_cast<uint64_t>(response.reply.integer())
+                   : 0;
   }
   return response.status;
 }

@@ -34,7 +34,7 @@ class BlockingCmd : public minikv::Cmd {
  public:
   BlockingCmd(std::string route_key, Tracker* tracker, Gate* gate,
               std::promise<void>* entered = nullptr)
-      : Cmd("BLOCK", minikv::CommandType::kPing, minikv::CmdFlags::kWrite),
+      : Cmd("BLOCK", minikv::CmdFlags::kWrite),
         route_key_(std::move(route_key)),
         tracker_(tracker),
         gate_(gate),
@@ -93,7 +93,7 @@ std::unique_ptr<minikv::Cmd> MakeBlockingCmd(const std::string& route_key,
 class QuickCmd : public minikv::Cmd {
  public:
   explicit QuickCmd(std::string route_key)
-      : Cmd("QUICK", minikv::CommandType::kPing, minikv::CmdFlags::kRead),
+      : Cmd("QUICK", minikv::CmdFlags::kRead),
         route_key_(std::move(route_key)) {}
 
  private:

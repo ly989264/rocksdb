@@ -27,6 +27,9 @@ std::string EncodeError(const std::string& value);
 std::string EncodeInteger(long long value);
 std::string EncodeBulkString(const std::string& value);
 std::string EncodeArray(const std::vector<std::string>& values);
+std::string EncodeMap(const std::vector<ReplyNode::MapEntry>& entries);
+std::string EncodeNull();
+std::string EncodeReply(const ReplyNode& reply);
 std::string EncodeResponse(const CommandResponse& response);
 
 }  // namespace minikv

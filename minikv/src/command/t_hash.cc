@@ -12,7 +12,7 @@ namespace {
 class HSetCmd : public Cmd {
  public:
   explicit HSetCmd(const CmdRegistration& registration)
-      : Cmd(registration.name, registration.type, registration.flags) {}
+      : Cmd(registration.name, registration.flags) {}
 
  private:
   rocksdb::Status DoInitial(const CmdInput& input) override {
@@ -46,7 +46,7 @@ class HSetCmd : public Cmd {
 class HGetAllCmd : public Cmd {
  public:
   explicit HGetAllCmd(const CmdRegistration& registration)
-      : Cmd(registration.name, registration.type, registration.flags) {}
+      : Cmd(registration.name, registration.flags) {}
 
  private:
   rocksdb::Status DoInitial(const CmdInput& input) override {
@@ -84,7 +84,7 @@ class HGetAllCmd : public Cmd {
 class HDelCmd : public Cmd {
  public:
   explicit HDelCmd(const CmdRegistration& registration)
-      : Cmd(registration.name, registration.type, registration.flags) {}
+      : Cmd(registration.name, registration.flags) {}
 
  private:
   rocksdb::Status DoInitial(const CmdInput& input) override {

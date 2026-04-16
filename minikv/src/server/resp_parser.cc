@@ -137,19 +137,47 @@ std::string EncodeArray(const std::vector<std::string>& values) {
   return out;
 }
 
+std::string EncodeMap(const std::vector<ReplyNode::MapEntry>& entries) {
+  std::string out = "%" + std::to_string(entries.size()) + "\r\n";
+  for (const auto& entry : entries) {
+    out += EncodeReply(entry.first);
+    out += EncodeReply(entry.second);
+  }
+  return out;
+}
+
+std::string EncodeNull() { return "_\r\n"; }
+
+std::string EncodeReply(const ReplyNode& reply) {
+  switch (reply.type()) {
+    case ReplyNode::Type::kSimpleString:
+      return EncodeSimpleString(reply.string());
+    case ReplyNode::Type::kError:
+      return EncodeError(reply.string());
+    case ReplyNode::Type::kInteger:
+      return EncodeInteger(reply.integer());
+    case ReplyNode::Type::kBulkString:
+      return EncodeBulkString(reply.string());
+    case ReplyNode::Type::kArray: {
+      std::string out = "*" + std::to_string(reply.array().size()) + "\r\n";
+      for (const auto& child : reply.array()) {
+        out += EncodeReply(child);
+      }
+      return out;
+    }
+    case ReplyNode::Type::kMap:
+      return EncodeMap(reply.map());
+    case ReplyNode::Type::kNull:
+      return EncodeNull();
+  }
+  return EncodeError("ERR unsupported reply type");
+}
+
 std::string EncodeResponse(const CommandResponse& response) {
   if (!response.status.ok()) {
     return EncodeError("ERR " + response.status.ToString());
   }
-  switch (response.value.type) {
-    case ResponseType::kSimpleString:
-      return EncodeSimpleString(response.value.text);
-    case ResponseType::kInteger:
-      return EncodeInteger(response.value.integer);
-    case ResponseType::kArray:
-      return EncodeArray(response.value.array);
-  }
-  return EncodeError("ERR unsupported response type");
+  return EncodeReply(response.reply);
 }
 
 }  // namespace minikv

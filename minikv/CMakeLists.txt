@@ -12,6 +12,8 @@ set(MINIKV_INTERNAL_HEADERS
   src/common/thread_name.h
   src/engine/db_engine.h
   src/engine/key_codec.h
+  src/kernel/command_registry.h
+  src/kernel/reply.h
   src/server/metrics.h
   src/server/resp_parser.h
   src/server/server.h
@@ -27,6 +29,8 @@ set(MINIKV_SOURCES
   src/common/thread_name.cc
   src/engine/db_engine.cc
   src/engine/key_codec.cc
+  src/kernel/command_registry.cc
+  src/kernel/reply.cc
   src/server/resp_parser.cc
   src/server/server.cc
   src/worker/key_lock_table.cc
@@ -75,7 +79,11 @@ if(WITH_TESTS)
   endfunction()
 
   minikv_add_test(minikv_cmd_test tests/command_test/cmd_test.cc)
+  minikv_add_test(minikv_command_registry_test
+    tests/command_test/command_registry_test.cc)
   minikv_add_test(minikv_hash_test tests/command_test/hash_command_test.cc)
   minikv_add_test(minikv_server_test tests/server_test/server_test.cc)
+  minikv_add_test(minikv_reply_encode_test
+    tests/server_test/reply_encode_test.cc)
   minikv_add_test(minikv_worker_test tests/worker_test/worker_test.cc)
 endif()
