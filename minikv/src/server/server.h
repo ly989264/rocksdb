@@ -14,6 +14,7 @@
 
 #include "minikv/config.h"
 #include "minikv/minikv.h"
+#include "metrics.h"
 #include "rocksdb/status.h"
 
 namespace minikv {
@@ -33,6 +34,7 @@ class Server {
   void Wait();
   rocksdb::Status Run();
   uint16_t port() const { return bound_port_; }
+  MetricsSnapshot GetMetricsSnapshot() const;
 
  private:
   struct Connection {
@@ -46,6 +48,8 @@ class Server {
     uint64_t next_response_seq = 0;
     std::map<uint64_t, CommandResponse> buffered_responses;
     bool close_after_write = false;
+    bool close_due_to_idle_timeout = false;
+    bool close_due_to_error = false;
     std::chrono::steady_clock::time_point last_activity;
   };
 
@@ -91,6 +95,11 @@ class Server {
   std::atomic<size_t> next_io_thread_{0};
   std::atomic<uint64_t> next_connection_id_{1};
   std::atomic<size_t> connection_count_{0};
+  std::atomic<uint64_t> accepted_connections_{0};
+  std::atomic<uint64_t> closed_connections_{0};
+  std::atomic<uint64_t> idle_timeout_connections_{0};
+  std::atomic<uint64_t> errored_connections_{0};
+  std::atomic<uint64_t> parse_errors_{0};
   std::atomic<bool> stopping_{false};
   std::atomic<bool> started_{false};
 };

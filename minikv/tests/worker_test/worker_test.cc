@@ -418,6 +418,72 @@ TEST(WorkerRuntimeTest, SameKeyQuickTaskWaitsUntilBlockedTaskReleasesLock) {
             std::future_status::ready);
 }
 
+TEST(WorkerRuntimeTest, MetricsSnapshotTracksBacklogRejectionsAndInflight) {
+  minikv::KeyLockTable key_locks(128);
+  minikv::WorkerRuntime runtime(nullptr, &key_locks, 1, 1);
+  Tracker tracker;
+  Gate blocked_gate;
+  std::promise<void> blocked_entered;
+  std::future<void> blocked_entered_future = blocked_entered.get_future();
+  std::promise<void> blocked_done;
+  std::future<void> blocked_done_future = blocked_done.get_future();
+  std::promise<void> quick_done;
+  std::future<void> quick_done_future = quick_done.get_future();
+  std::promise<void> queued_done;
+  std::future<void> queued_done_future = queued_done.get_future();
+
+  ASSERT_TRUE(runtime.Submit(
+                        MakeBlockingCmd("user:metric", &tracker, &blocked_gate,
+                                        &blocked_entered),
+                        [&](minikv::CommandResponse response) {
+                          ASSERT_TRUE(response.status.ok());
+                          blocked_done.set_value();
+                        })
+                  .ok());
+
+  blocked_entered_future.wait();
+
+  minikv::MetricsSnapshot first = runtime.GetMetricsSnapshot();
+  ASSERT_EQ(first.worker_queue_depth.size(), 1U);
+  EXPECT_GE(first.worker_queue_depth[0], 0U);
+  EXPECT_EQ(first.worker_inflight, 1U);
+  EXPECT_EQ(first.worker_rejections, 0U);
+
+  ASSERT_TRUE(runtime
+                  .Submit(MakeBlockingCmd("user:metric:queued", &tracker, &blocked_gate),
+                          [&](minikv::CommandResponse response) {
+                            ASSERT_TRUE(response.status.ok());
+                            queued_done.set_value();
+                          })
+                  .ok());
+
+  rocksdb::Status rejected =
+      runtime.Submit(MakeQuickCmd("user:metric:busy"),
+                     [&](minikv::CommandResponse response) {
+        ASSERT_TRUE(response.status.ok());
+        quick_done.set_value();
+      });
+  ASSERT_TRUE(rejected.IsBusy());
+
+  minikv::MetricsSnapshot second = runtime.GetMetricsSnapshot();
+  EXPECT_EQ(second.worker_rejections, 1U);
+  EXPECT_EQ(second.worker_inflight, 2U);
+
+  {
+    std::lock_guard<std::mutex> lock(tracker.mutex);
+    blocked_gate.release = true;
+  }
+  tracker.cv.notify_all();
+  blocked_done_future.wait();
+  queued_done_future.wait();
+
+  minikv::MetricsSnapshot third = runtime.GetMetricsSnapshot();
+  EXPECT_EQ(third.worker_inflight, 0U);
+  EXPECT_EQ(third.worker_rejections, 1U);
+  EXPECT_EQ(quick_done_future.wait_for(std::chrono::milliseconds(10)),
+            std::future_status::timeout);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
